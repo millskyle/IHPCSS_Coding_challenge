@@ -1,6 +1,6 @@
 /**
  * @file hybrid_gpu.c
- * @brief Contains the MPI + OpenACC version of Laplace.
+ * @brief Contains the MPI version of Laplace.
  * @note This code was originaly written by John Urbanic for PSC 2014, later modified by Ludovic Capelli.
  * @author John Urbanic
  * @author Ludovic Capelli
@@ -77,7 +77,8 @@ int main(int argc, char *argv[])
 	// 2 MPI processes per node, 2 GPUs per node, this makes sure that the 2 MPI processes don't use the same GPU
 	int number_of_acc_devices = acc_get_num_devices(1);
 	acc_set_device_num(my_local_rank % number_of_acc_devices, 1);
-
+        
+	#pragma acc data copy(temperature, temperature_last)
 	while(dt_global > MAX_TEMP_ERROR && iteration <= MAX_NUMBER_OF_ITERATIONS)
 	{
 		iteration++;
@@ -98,7 +99,7 @@ int main(int argc, char *argv[])
 		//////////////////////
 		// HALO SWAP PHASE //
 		////////////////////
-
+		#pragma acc update host(temperature[1:1][1:COLUMNS], temperature[ROWS:1][1:COLUMNS])
 		// If we are not the last MPI process, we have a bottom neighbour
 		if(my_rank != comm_size-1)
 		{
@@ -127,6 +128,8 @@ int main(int argc, char *argv[])
 			MPI_Recv(&temperature_last[ROWS+1][1], COLUMNS, MPI_DOUBLE, my_rank+1, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 		}
 
+
+		#pragma acc update device(temperature_last[0:1][1:COLUMNS], temperature_last[ROWS+1:1][1:COLUMNS])
 		//////////////////////////////////////
 		// FIND MAXIMAL TEMPERATURE CHANGE //
 		////////////////////////////////////
