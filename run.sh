@@ -166,6 +166,9 @@ elif [ "$2" == "hybrid_gpu" ]; then
 		runner="mpirun -n 8 -mca btl ^openib";
 	fi
 fi
+
+runner="$runner nvprof -o simpleMPI.%q{OMPI_COMM_WORLD_RANK}.nvprof "
+
 executable="./bin/$1/$2_$3";
 if [ -f "${executable}" ]; then
 	echo_success "The executable ${executable} exists.";
