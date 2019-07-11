@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
 	int number_of_acc_devices = acc_get_num_devices(1);
 	acc_set_device_num(my_local_rank % number_of_acc_devices, 1);
         
-	#pragma acc data copy(temperature, temperature_last)
+	#pragma acc data copy(temperature_last), create(temperature)
 	while(dt_global > MAX_TEMP_ERROR && iteration <= MAX_NUMBER_OF_ITERATIONS)
 	{
 		iteration++;
@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
 		
 		
 
-		#pragma acc parallel loop async(6) vector_length(1024)
+		#pragma acc parallel loop async(5) vector_length(1024)
 		for(unsigned int i = 1; i <= ROWS; i++)
 		{
 			for(unsigned int j = 1; j <= COLUMNS; j++)
