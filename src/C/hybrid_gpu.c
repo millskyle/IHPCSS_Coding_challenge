@@ -83,23 +83,93 @@ int main(int argc, char *argv[])
 	{
 		iteration++;
 
-		// Main calculation: average my four neighbours
-		#pragma acc kernels
+		
+
+		dt = 0.0;
+
+		//prioritize the halo
+
+		{int i=1;
+		#pragma acc parallel loop async(1) vector_length(1024)
+		for(unsigned int j = 1; j <= COLUMNS; j++)
+		{
+			temperature[i][j] = 0.25 * (temperature_last[i+1][j  ] +
+										temperature_last[i-1][j  ] +
+										temperature_last[i  ][j+1] +
+										temperature_last[i  ][j-1]);
+				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
+		}}
+
+		{int i=ROWS;
+		#pragma acc parallel loop async(2) vector_length(1024)
+		for(unsigned int j = 1; j <= COLUMNS; j++)
+		{
+			temperature[i][j] = 0.25 * (temperature_last[i+1][j  ] +
+										temperature_last[i-1][j  ] +
+										temperature_last[i  ][j+1] +
+										temperature_last[i  ][j-1]);
+				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
+		}}
+
+
+		{int j=1;
+		#pragma acc parallel loop async(3) vector_length(1024)
 		for(unsigned int i = 1; i <= ROWS; i++)
 		{
-			for(unsigned int j = 1; j <= COLUMNS; j++)
+			temperature[i][j] = 0.25 * (temperature_last[i+1][j  ] +
+										temperature_last[i-1][j  ] +
+										temperature_last[i  ][j+1] +
+										temperature_last[i  ][j-1]);
+				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
+		}}
+
+		{int j=COLUMNS;
+		#pragma acc parallel loop async(4) vector_length(1024)
+		for(unsigned int i = 1; i <= ROWS; i++)
+		{
+			temperature[i][j] = 0.25 * (temperature_last[i+1][j  ] +
+										temperature_last[i-1][j  ] +
+										temperature_last[i  ][j+1] +
+										temperature_last[i  ][j-1]);
+				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
+		}}
+
+
+
+		// Main calculation: average my four neighbours
+		#pragma acc parallel loop async(5) vector_length(1024)
+		for(unsigned int i = 2; i <= ROWS-1; i++)
+		{
+			for(unsigned int j = 2; j <= COLUMNS-1; j++)
 			{
 				temperature[i][j] = 0.25 * (temperature_last[i+1][j  ] +
 											temperature_last[i-1][j  ] +
 											temperature_last[i  ][j+1] +
 											temperature_last[i  ][j-1]);
+				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
 			}
 		}
+
+		//////////////////////////////////////
+		// FIND MAXIMAL TEMPERATURE CHANGE //
+		////////////////////////////////////
+		
+		
+
+		#pragma acc parallel loop async(6) vector_length(1024)
+		for(unsigned int i = 1; i <= ROWS; i++)
+		{
+			for(unsigned int j = 1; j <= COLUMNS; j++)
+			{
+				temperature_last[i][j] = temperature[i][j];
+			}
+		}
+
+		#pragma acc update host(temperature[1:1][1:COLUMNS], temperature[ROWS:1][1:COLUMNS]) wait(1,2,3,4)
 
 		//////////////////////
 		// HALO SWAP PHASE //
 		////////////////////
-		#pragma acc update host(temperature[1:1][1:COLUMNS], temperature[ROWS:1][1:COLUMNS])
 		// If we are not the last MPI process, we have a bottom neighbour
 		if(my_rank != comm_size-1)
 		{
@@ -129,21 +199,10 @@ int main(int argc, char *argv[])
 		}
 
 
-		#pragma acc update device(temperature_last[0:1][1:COLUMNS], temperature_last[ROWS+1:1][1:COLUMNS])
-		//////////////////////////////////////
-		// FIND MAXIMAL TEMPERATURE CHANGE //
-		////////////////////////////////////
-		dt = 0.0;
+		#pragma acc update device(temperature_last[0:1][1:COLUMNS], temperature_last[ROWS+1:1][1:COLUMNS]) async(1)
 
-		#pragma acc kernels
-		for(unsigned int i = 1; i <= ROWS; i++)
-		{
-			for(unsigned int j = 1; j <= COLUMNS; j++)
-			{
-				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
-				temperature_last[i][j] = temperature[i][j];
-			}
-		}
+
+		
 
 		// We know our temperature delta, we now need to sum it with that of other MPI processes
 		MPI_Reduce(&dt, &dt_global, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
@@ -157,6 +216,8 @@ int main(int argc, char *argv[])
 				track_progress(iteration, temperature);
 			}
 		}
+
+		#pragma acc wait
 	}
 
     // Slightly more accurate timing and cleaner output 
