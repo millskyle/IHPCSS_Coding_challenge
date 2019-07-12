@@ -37,6 +37,8 @@ int main(int argc, char *argv[])
     // Status returned by MPI calls
     MPI_Status status;
 
+    MPI_Request req[2];
+
     // The usual MPI startup routines
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -78,7 +80,9 @@ int main(int argc, char *argv[])
 	int number_of_acc_devices = acc_get_num_devices(1);
 	acc_set_device_num(my_local_rank % number_of_acc_devices, 1);
         
-	#pragma acc data copy(temperature_last), create(temperature)
+	#pragma acc data create(temperature,temperature_last)
+{
+#pragma acc update device(temperature_last[0:ROWS+1][0:1], temperature_last[0:ROWS+1][COLUMNS+1:1], temperature_last[0:1][0:COLUMNS+1], temperature_last[ROWS+1:1][0:COLUMNS+1])
 	while(dt_global > MAX_TEMP_ERROR && iteration <= MAX_NUMBER_OF_ITERATIONS)
 	{
 		iteration++;
@@ -174,7 +178,7 @@ int main(int argc, char *argv[])
 		if(my_rank != comm_size-1)
 		{
 			// We send our bottom row to our bottom neighbour
-			MPI_Send(&temperature[ROWS][1], COLUMNS, MPI_DOUBLE, my_rank+1, 0, MPI_COMM_WORLD);
+			MPI_Isend(&temperature[ROWS][1], COLUMNS, MPI_DOUBLE, my_rank+1, 0, MPI_COMM_WORLD, &req[0]);
 		}
 
 		// If we are not the first MPI process, we have a top neighbour
@@ -188,7 +192,7 @@ int main(int argc, char *argv[])
 		if(my_rank != 0)
 		{
 			// Send out top row to our top neighbour
-			MPI_Send(&temperature[1][1], COLUMNS, MPI_DOUBLE, my_rank-1, 0, MPI_COMM_WORLD);
+			MPI_Isend(&temperature[1][1], COLUMNS, MPI_DOUBLE, my_rank-1, 0, MPI_COMM_WORLD, &req[1]);
 		}
 
 		// If we are not the last MPI process, we have a bottom neighbour
@@ -219,7 +223,7 @@ int main(int argc, char *argv[])
 
 		#pragma acc wait
 	}
-
+}
     // Slightly more accurate timing and cleaner output 
     MPI_Barrier(MPI_COMM_WORLD);
 
