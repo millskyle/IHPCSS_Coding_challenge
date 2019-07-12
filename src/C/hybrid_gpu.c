@@ -37,7 +37,7 @@ int main(int argc, char *argv[])
     // Status returned by MPI calls
     MPI_Status status;
 
-    MPI_Request req[2];
+    MPI_Request req[4];
 
     // The usual MPI startup routines
     MPI_Init(&argc, &argv);
@@ -151,6 +151,8 @@ int main(int argc, char *argv[])
 											temperature_last[i  ][j+1] +
 											temperature_last[i  ][j-1]);
 				dt = fmax(fabs(temperature[i][j]-temperature_last[i][j]), dt);
+
+
 			}
 		}
 
@@ -171,7 +173,7 @@ int main(int argc, char *argv[])
 
 		#pragma acc update host(temperature[1:1][1:COLUMNS], temperature[ROWS:1][1:COLUMNS]) wait(1,2,3,4)
 
-		//////////////////////
+	  	//////////////////////
 		// HALO SWAP PHASE //
 		////////////////////
 		// If we are not the last MPI process, we have a bottom neighbour
@@ -192,7 +194,7 @@ int main(int argc, char *argv[])
 		if(my_rank != 0)
 		{
 			// Send out top row to our top neighbour
-			MPI_Isend(&temperature[1][1], COLUMNS, MPI_DOUBLE, my_rank-1, 0, MPI_COMM_WORLD, &req[1]);
+			MPI_Isend(&temperature[1][1], COLUMNS, MPI_DOUBLE, my_rank-1, 0, MPI_COMM_WORLD, &req[2]);
 		}
 
 		// If we are not the last MPI process, we have a bottom neighbour
@@ -201,8 +203,6 @@ int main(int argc, char *argv[])
 			// We receive the top row from that neighbour into our bottom halo
 			MPI_Recv(&temperature_last[ROWS+1][1], COLUMNS, MPI_DOUBLE, my_rank+1, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 		}
-
-
 		#pragma acc update device(temperature_last[0:1][1:COLUMNS], temperature_last[ROWS+1:1][1:COLUMNS]) async(1)
 
 
